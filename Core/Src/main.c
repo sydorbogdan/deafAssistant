@@ -25,6 +25,7 @@
 #include "i2s.h"
 #include "pdm2pcm.h"
 #include "spi.h"
+#include "tim.h"
 #include "usb_device.h"
 #include "gpio.h"
 
@@ -33,6 +34,8 @@
 #include "usbd_cdc_if.h"
 #include <string.h>
 #include "cs43l22.h"
+#include "kiss_fft.h"
+#include<math.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,7 +56,10 @@
 
 /* USER CODE BEGIN PV */
 uint16_t txBuf[128];
-uint16_t pdmRxBuf[128*5];//64-32 bit frames = 128 half words
+uint16_t pdmRxBuf[512*4];//64-32 bit frames = 128 half words
+float ReBuffer[512];
+float ImBuffer[512];
+float FFTBuffer[512];
 uint16_t MidBuffer[16];
 uint8_t txstate = 0;
 uint8_t rxstate = 0;
@@ -63,6 +69,7 @@ uint16_t fifobuf[256];
 uint8_t fifo_w_ptr = 0;
 uint8_t fifo_r_ptr = 0;
 uint8_t fifo_read_enabled = 0;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -111,6 +118,47 @@ int itoa2(uint16_t value,char *ptr)
         }
         return count+1;
      }
+int min(int a,int b){
+	if(a>b) return b;
+	return a;
+}
+void start_vibro()
+{
+	int vibros[4] = {10,50,200,1000};
+	double sums[4] = {0,0,0,0};
+	int j =0;
+	for(int i=1;i<256;i+=1){
+		if(i > vibros[j]) j++;
+		if(FFTBuffer[i]/100000 > sums[j])
+			sums[j] = FFTBuffer[i]/100000;
+
+	}
+	int diff[4] = {0,0,0,0};
+	for(int i= 0;i<4;i++){
+		for(int j=0;j<4;j++){
+			if(sums[i] >= sums[j] - 0.5){
+				diff[i]+=1;
+			}
+			}
+		}
+
+	TIM4->CCR1 = diff[0] * 1024 - 1;
+	if(TIM4->CCR1 != 4095){
+		TIM4->CCR1 = 0;
+	}
+	TIM4->CCR2 = diff[1] * 1024 - 1;
+	if(TIM4->CCR2 != 4095){
+		TIM4->CCR2 = 0;
+	}
+	TIM4->CCR3 = diff[2] * 1024 - 1;
+	if(TIM4->CCR3 != 4095){
+		TIM4->CCR3 = 0;
+	}
+	TIM4->CCR4 = diff[3] * 1024 - 1;
+	if(TIM4->CCR4 != 4095){
+		TIM4->CCR4 = 0;
+	}
+}
 /* USER CODE END 0 */
 
 /**
@@ -149,6 +197,7 @@ int main(void)
   MX_CRC_Init();
   MX_PDM2PCM_Init();
   MX_USB_DEVICE_Init();
+  MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
 	CS43_Init(hi2c1,MODE_I2S);
 	CS43_SetVolume(60);//70
@@ -156,7 +205,14 @@ int main(void)
 	CS43_Start();
   //HAL_I2S_Transmit_DMA(&hi2s3, &txBuf[0], 64);// 64-32 bit frames to external i2s DAC
   HAL_I2S_Receive_DMA(&hi2s2, &pdmRxBuf[0],64);//64-32 bit frames from PDM microphone
-
+  HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim4,TIM_CHANNEL_4);
+  TIM4->CCR1 = 0;
+  TIM4->CCR2 = 0;
+  TIM4->CCR3 = 0;
+  TIM4->CCR4 = 0;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -164,6 +220,7 @@ int main(void)
   const char str[] = "Hello!\n";
   uint16_t data_in[128];
   int rxIter = 0;
+  int k =0;
   while (1)
   {
 
@@ -194,22 +251,22 @@ int main(void)
 
 
 
-		 if (rxIter == 64*5) {//RxHalfCpltCallback
-			for(int y =0;y<64*5;y+=64){
+		 if (rxIter == 512 * 4) {//RxHalfCpltCallba
+			for(int y =0;y<64*32;y+=64){
 				PDM_Filter(&pdmRxBuf[y],&MidBuffer[0], &PDM1_filter_handler);//filter first 64x16bit received PDM data
-				for (int i=0; i<16;i++) {
-					  char *c[100];
-
-					  int x = itoa2(MidBuffer[i],c);
-					  //c[x] = ',';
-					  //c[x+1] = '\0';
-					  CDC_Transmit_FS(c,x);
-					  HAL_Delay(5);
-					  //CDC_Transmit_FS(", ",2);
-					  //HAL_Delay(5);
-				}//write PCM data to FIFO
+				for(int i=0;i<16;i++){
+					ReBuffer[i+y/4] = MidBuffer[i];
+				}
+			}
+			FFT(ReBuffer, ImBuffer, 512, 9, -1);
+			for(int i=0;i<512;i++){
+				FFTBuffer[i] = ReBuffer[i] * ReBuffer[i] + ImBuffer[i] * ImBuffer[i];
+				FFTBuffer[i] = sqrt(FFTBuffer[i]);
+				ImBuffer[i] = 0;
 			}
 	    	rxIter = 0;
+	    	k+=1;
+	    	start_vibro();
 		 }
 
 
