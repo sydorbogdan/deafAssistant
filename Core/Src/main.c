@@ -124,15 +124,17 @@ int min(int a,int b){
 }
 void start_vibro()
 {
-	int vibros[4] = {10,50,200,1000};
+	int vibros[4] = {15,50,100,1000};
 	double sums[4] = {0,0,0,0};
 	int j =0;
 	for(int i=1;i<256;i+=1){
 		if(i > vibros[j]) j++;
 		if(FFTBuffer[i]/100000 > sums[j])
+
 			sums[j] = FFTBuffer[i]/100000;
 
 	}
+	sums[2]/=1.5;
 	int diff[4] = {0,0,0,0};
 	for(int i= 0;i<4;i++){
 		for(int j=0;j<4;j++){
@@ -142,22 +144,11 @@ void start_vibro()
 			}
 		}
 
-	TIM4->CCR1 = diff[0] * 1024 - 1;
-	if(TIM4->CCR1 != 4095){
-		TIM4->CCR1 = 0;
-	}
-	TIM4->CCR2 = diff[1] * 1024 - 1;
-	if(TIM4->CCR2 != 4095){
-		TIM4->CCR2 = 0;
-	}
-	TIM4->CCR3 = diff[2] * 1024 - 1;
-	if(TIM4->CCR3 != 4095){
-		TIM4->CCR3 = 0;
-	}
-	TIM4->CCR4 = diff[3] * 1024 - 1;
-	if(TIM4->CCR4 != 4095){
-		TIM4->CCR4 = 0;
-	}
+	TIM4->CCR1 = diff[0] * 512 - 1;
+	TIM4->CCR2 = diff[1] * 512 - 1;
+	TIM4->CCR3 = diff[2] * 512 - 1;
+	TIM4->CCR4 = diff[3] * 512 - 1;
+
 }
 /* USER CODE END 0 */
 
