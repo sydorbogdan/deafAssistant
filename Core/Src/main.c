@@ -125,14 +125,13 @@ int min(int a,int b){
 
 double get_db(){
 	double sum = 0;
-	for(int i=1;i<256;i++){
-
+	for(int i=1;i<512;i++){
 			sum+=FFTBuffer[i];
-
 	}
 	sum = sqrt(2*sum);
-	sum = log10(sum);
-	return sum;
+	sum = sum/32678;
+	sum = 10 * sum;
+	return sum/3 - 2;
 }
 
 void start_vibro(double db)
@@ -157,7 +156,8 @@ void start_vibro(double db)
 			}
 			}
 		}
-
+	if(db>3)
+		db = 3;
 	TIM4->CCR1 = (diff[0] * 400 - 1) * db;
 	TIM4->CCR2 = (diff[1] * 400 - 1) * db ;
 	TIM4->CCR3 = (diff[2] * 400 - 1) * db;
@@ -226,6 +226,7 @@ int main(void)
   uint16_t data_in[128];
   int rxIter = 0;
   int k =0;
+  double avg = 0;
   while (1)
   {
 
@@ -272,7 +273,20 @@ int main(void)
 				ImBuffer[i] = 0;
 			}
 			double db = get_db();
-			db = 1;
+			db*=db;
+			db*=9;
+			db*=db*db*db;
+			db = (0.6 - db)*5;
+			if(db<0){
+				db =0;
+			}
+			avg+=db;
+
+			if(k%100==0){
+				k = 1;
+
+				avg = 0;
+			}
 			rxIter = 0;
 	    	k+=1;
 	    	start_vibro(db);
