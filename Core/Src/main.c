@@ -122,7 +122,20 @@ int min(int a,int b){
 	if(a>b) return b;
 	return a;
 }
-void start_vibro()
+
+double get_db(){
+	double sum = 0;
+	for(int i=1;i<256;i++){
+
+			sum+=FFTBuffer[i];
+
+	}
+	sum = sqrt(2*sum);
+	sum = log10(sum);
+	return sum;
+}
+
+void start_vibro(double db)
 {
 	int vibros[4] = {15,50,100,1000};
 	double sums[4] = {0,0,0,0};
@@ -135,6 +148,7 @@ void start_vibro()
 
 	}
 	sums[2]/=1.5;
+	sums[1]/=1.2;
 	int diff[4] = {0,0,0,0};
 	for(int i= 0;i<4;i++){
 		for(int j=0;j<4;j++){
@@ -144,10 +158,10 @@ void start_vibro()
 			}
 		}
 
-	TIM4->CCR1 = diff[0] * 512 - 1;
-	TIM4->CCR2 = diff[1] * 512 - 1;
-	TIM4->CCR3 = diff[2] * 512 - 1;
-	TIM4->CCR4 = diff[3] * 512 - 1;
+	TIM4->CCR1 = (diff[0] * 400 - 1) * db;
+	TIM4->CCR2 = (diff[1] * 400 - 1) * db ;
+	TIM4->CCR3 = (diff[2] * 400 - 1) * db;
+	TIM4->CCR4 = (diff[3] * 400 - 1) * db ;
 
 }
 /* USER CODE END 0 */
@@ -249,15 +263,19 @@ int main(void)
 					ReBuffer[i+y/4] = MidBuffer[i];
 				}
 			}
+
 			FFT(ReBuffer, ImBuffer, 512, 9, -1);
+
 			for(int i=0;i<512;i++){
 				FFTBuffer[i] = ReBuffer[i] * ReBuffer[i] + ImBuffer[i] * ImBuffer[i];
 				FFTBuffer[i] = sqrt(FFTBuffer[i]);
 				ImBuffer[i] = 0;
 			}
-	    	rxIter = 0;
+			double db = get_db();
+			db = 1;
+			rxIter = 0;
 	    	k+=1;
-	    	start_vibro();
+	    	start_vibro(db);
 		 }
 
 
